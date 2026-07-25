@@ -28,6 +28,7 @@ app.add_middleware(
 
 
 @app.post("/")
+@app.post("/api")
 async def handle_request(request: Request):
     try:
         body = await request.json()
