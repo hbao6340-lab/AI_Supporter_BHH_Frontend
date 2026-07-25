@@ -1,6 +1,5 @@
 {
   "buildCommand": "echo 'build complete'",
   "devCommand": "echo 'no dev'",
-  "installCommand": "pip install -r requirements.txt",
-  "framework": "other"
+  "installCommand": "pip install -r requirements.txt"
 }
