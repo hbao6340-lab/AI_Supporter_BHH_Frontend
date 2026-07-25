@@ -1,0 +1,21 @@
+# Live2D Model Directory
+
+Place your Live2D model files here.
+
+## Required Files
+
+- `your_model.model3.json` - Main model file
+- `your_model.2048/` - Texture directory (if separate)
+
+## Download Sample Models
+
+- [Live2D Cubism Samples](https://www.live2d.com/en/download/cubism-download/)
+- [Vtuber Models](https://hub.live2d.jp/)
+
+## Configuration
+
+After adding your model, update the model path in `../app.js`:
+
+```javascript
+const modelPath = "./live2d/your_model.model3.json";
+```
