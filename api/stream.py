@@ -3,6 +3,9 @@ import sys
 import os
 import base64
 import logging
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse, StreamingResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,25 +17,22 @@ from brain import get_reply
 from tts import preprocess_text, generate_full_tts, stream_tts
 from lipsync import generate_visemes, estimate_word_timing
 
+app = FastAPI()
 
-async def handler(request):
-    cors_headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-        "Cache-Control": "no-cache",
-    }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if request.method == "OPTIONS":
-        return {"statusCode": 200, "headers": cors_headers, "body": ""}
 
-    if request.method != "POST":
-        return {"statusCode": 405, "headers": cors_headers, "body": json.dumps({"error": "Method not allowed"})}
-
+@app.post("/stream")
+async def handle_stream(request: Request):
     try:
         body = await request.json()
     except Exception as e:
-        return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Invalid JSON: {str(e)}"})}
+        return JSONResponse(status_code=400, content={"error": f"Invalid JSON: {str(e)}"})
 
     text = body.get("text", "")
     exact_tts = body.get("exact_tts", False)
@@ -46,10 +46,10 @@ async def handler(request):
                 logger.info(f"Transcribed audio to text: {text[:50] if text else '(empty)'}...")
             except Exception as e:
                 logger.error(f"ASR transcription error: {e}")
-                return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Audio transcription failed: {str(e)}"})}
+                return JSONResponse(status_code=400, content={"error": f"Audio transcription failed: {str(e)}"})
 
         if not text:
-            return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Missing text"})}
+            return JSONResponse(status_code=400, content={"error": "Missing text"})
 
         if exact_tts:
             reply = text
@@ -95,17 +95,10 @@ async def handler(request):
 
             yield f"data: {json.dumps({'done': True})}\n\n"
 
-        return {
-            "statusCode": 200,
-            "headers": {
-                **cors_headers,
-                "Content-Type": "text/event-stream",
-            },
-            "body": event_stream(),
-        }
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     except Exception as e:
         logger.error(f"Stream error: {e}")
         import traceback
         traceback.print_exc()
-        return {"statusCode": 500, "headers": cors_headers, "body": json.dumps({"error": str(e)})}
+        return JSONResponse(status_code=500, content={"error": str(e)})

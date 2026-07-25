@@ -3,6 +3,9 @@ import sys
 import os
 import base64
 import logging
+from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -14,30 +17,26 @@ from brain import get_reply
 from tts import generate_full_tts
 from lipsync import generate_visemes, estimate_word_timing
 
+app = FastAPI()
 
-async def handler(request):
-    cors_headers = {
-        "Access-Control-Allow-Origin": "*",
-        "Access-Control-Allow-Methods": "POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-    }
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
-    if request.method == "OPTIONS":
-        return {"statusCode": 200, "headers": cors_headers, "body": ""}
 
-    if request.method != "POST":
-        return {"statusCode": 405, "headers": cors_headers, "body": json.dumps({"error": "Method not allowed"})}
-
+@app.post("/")
+async def handle_request(request: Request):
     try:
         body = await request.json()
     except Exception as e:
-        return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Invalid JSON: {str(e)}"})}
+        return JSONResponse(status_code=400, content={"error": f"Invalid JSON: {str(e)}"})
 
     text = body.get("text", "")
     audio_data = body.get("audio", "")
     exact_tts = body.get("exact_tts", False)
-
-    cors_headers["Access-Control-Allow-Origin"] = "*"
 
     try:
         if audio_data:
@@ -47,10 +46,10 @@ async def handler(request):
                 logger.info(f"Transcribed audio to text: {text[:50] if text else '(empty)'}...")
             except Exception as e:
                 logger.error(f"ASR transcription error: {e}")
-                return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Audio transcription failed: {str(e)}"})}
+                return JSONResponse(status_code=400, content={"error": f"Audio transcription failed: {str(e)}"})
 
         if not text:
-            return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Missing text or audio"})}
+            return JSONResponse(status_code=400, content={"error": "Missing text or audio"})
 
         if exact_tts:
             reply = text
@@ -68,7 +67,7 @@ async def handler(request):
 
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
 
-        response_body = {
+        return JSONResponse(content={
             "text": reply,
             "user_text": text,
             "audio": audio_base64,
@@ -77,12 +76,10 @@ async def handler(request):
                 "words": word_timing,
                 "duration": audio_duration_ms,
             },
-        }
-
-        return {"statusCode": 200, "headers": cors_headers, "body": json.dumps(response_body)}
+        })
 
     except Exception as e:
         logger.error(f"API error: {e}")
         import traceback
         traceback.print_exc()
-        return {"statusCode": 500, "headers": cors_headers, "body": json.dumps({"error": str(e)})}
+        return JSONResponse(status_code=500, content={"error": str(e)})

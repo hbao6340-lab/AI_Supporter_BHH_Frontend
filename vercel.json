@@ -1,6 +1,9 @@
 {
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "api/stream.py", "use": "@vercel/python" }
+  ],
   "buildCommand": "echo 'build complete'",
   "devCommand": "echo 'no dev'",
-  "installCommand": "uv pip install --system -r requirements.txt",
   "outputDirectory": "."
 }
