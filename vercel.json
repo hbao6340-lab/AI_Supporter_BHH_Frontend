@@ -1,9 +1,8 @@
 {
   "builds": [
     { "src": "api/index.py", "use": "@vercel/python" },
-    { "src": "api/stream.py", "use": "@vercel/python" }
+    { "src": "api/stream.py", "use": "@vercel/python" },
+    { "src": "**/*.{html,js,css,ico}", "use": "@vercel/static" }
   ],
-  "buildCommand": "echo 'build complete'",
-  "devCommand": "echo 'no dev'",
   "outputDirectory": "."
 }
