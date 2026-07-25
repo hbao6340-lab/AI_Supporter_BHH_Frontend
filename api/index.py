@@ -12,10 +12,30 @@ logger = logging.getLogger(__name__)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from asr import transcribe_audio
-from brain import get_reply
-from tts import generate_full_tts
-from lipsync import generate_visemes, estimate_word_timing
+try:
+    from asr import transcribe_audio
+except Exception as e:
+    logger.warning(f"Failed to import asr: {e}")
+    transcribe_audio = None
+
+try:
+    from brain import get_reply
+except Exception as e:
+    logger.warning(f"Failed to import brain: {e}")
+    get_reply = None
+
+try:
+    from tts import generate_full_tts
+except Exception as e:
+    logger.warning(f"Failed to import tts: {e}")
+    generate_full_tts = None
+
+try:
+    from lipsync import generate_visemes, estimate_word_timing
+except Exception as e:
+    logger.warning(f"Failed to import lipsync: {e}")
+    generate_visemes = None
+    estimate_word_timing = None
 
 app = FastAPI()
 
@@ -40,7 +60,7 @@ async def handle_request(request: Request):
     exact_tts = body.get("exact_tts", False)
 
     try:
-        if audio_data:
+        if audio_data and transcribe_audio:
             try:
                 audio_bytes = base64.b64decode(audio_data)
                 text = transcribe_audio(audio_bytes)
@@ -54,17 +74,29 @@ async def handle_request(request: Request):
 
         if exact_tts:
             reply = text
-        else:
+        elif get_reply:
             reply = get_reply(text)
+        else:
+            reply = text
 
-        audio_bytes = generate_full_tts(reply) if generate_full_tts else b""
-
-        audio_duration_ms = len(audio_bytes) * 1000 // 24000 if audio_bytes else 1000
+        audio_bytes = b""
         viseme_sequence = []
         word_timing = []
-        if generate_full_tts and audio_bytes:
-            viseme_sequence = generate_visemes(audio_bytes)
-            word_timing = estimate_word_timing(reply, audio_duration_ms)
+        audio_duration_ms = 0
+
+        if generate_full_tts:
+            try:
+                audio_bytes = await generate_full_tts(reply)
+                if audio_bytes and generate_visemes and estimate_word_timing:
+                    try:
+                        viseme_sequence = generate_visemes(audio_bytes)
+                        audio_duration_ms = len(audio_bytes) * 1000 // 24000
+                        word_timing = estimate_word_timing(reply, audio_duration_ms)
+                    except Exception as e:
+                        logger.error(f"Lipsync error: {e}")
+            except Exception as e:
+                logger.error(f"TTS error: {e}")
+                audio_bytes = b""
 
         audio_base64 = base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
 
