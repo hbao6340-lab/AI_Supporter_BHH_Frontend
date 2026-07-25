@@ -1,0 +1,88 @@
+import json
+import sys
+import os
+import base64
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from asr import transcribe_audio
+from brain import get_reply
+from tts import generate_full_tts
+from lipsync import generate_visemes, estimate_word_timing
+
+
+async def handler(request):
+    cors_headers = {
+        "Access-Control-Allow-Origin": "*",
+        "Access-Control-Allow-Methods": "POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+    }
+
+    if request.method == "OPTIONS":
+        return {"statusCode": 200, "headers": cors_headers, "body": ""}
+
+    if request.method != "POST":
+        return {"statusCode": 405, "headers": cors_headers, "body": json.dumps({"error": "Method not allowed"})}
+
+    try:
+        body = await request.json()
+    except Exception as e:
+        return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Invalid JSON: {str(e)}"})}
+
+    text = body.get("text", "")
+    audio_data = body.get("audio", "")
+    exact_tts = body.get("exact_tts", False)
+
+    cors_headers["Access-Control-Allow-Origin"] = "*"
+
+    try:
+        if audio_data:
+            try:
+                audio_bytes = base64.b64decode(audio_data)
+                text = transcribe_audio(audio_bytes)
+                logger.info(f"Transcribed audio to text: {text[:50] if text else '(empty)'}...")
+            except Exception as e:
+                logger.error(f"ASR transcription error: {e}")
+                return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": f"Audio transcription failed: {str(e)}"})}
+
+        if not text:
+            return {"statusCode": 400, "headers": cors_headers, "body": json.dumps({"error": "Missing text or audio"})}
+
+        if exact_tts:
+            reply = text
+        else:
+            reply = get_reply(text)
+
+        audio_bytes = generate_full_tts(reply) if generate_full_tts else b""
+
+        audio_duration_ms = len(audio_bytes) * 1000 // 24000 if audio_bytes else 1000
+        viseme_sequence = []
+        word_timing = []
+        if generate_full_tts and audio_bytes:
+            viseme_sequence = generate_visemes(audio_bytes)
+            word_timing = estimate_word_timing(reply, audio_duration_ms)
+
+        audio_base64 = base64.b64encode(audio_bytes).decode("utf-8") if audio_bytes else ""
+
+        response_body = {
+            "text": reply,
+            "user_text": text,
+            "audio": audio_base64,
+            "lip_sync": {
+                "visemes": viseme_sequence,
+                "words": word_timing,
+                "duration": audio_duration_ms,
+            },
+        }
+
+        return {"statusCode": 200, "headers": cors_headers, "body": json.dumps(response_body)}
+
+    except Exception as e:
+        logger.error(f"API error: {e}")
+        import traceback
+        traceback.print_exc()
+        return {"statusCode": 500, "headers": cors_headers, "body": json.dumps({"error": str(e)})}
