@@ -27,7 +27,7 @@ app.add_middleware(
 )
 
 
-@app.post("/")
+@app.post("/stream")
 async def handle_stream(request: Request):
     try:
         body = await request.json()

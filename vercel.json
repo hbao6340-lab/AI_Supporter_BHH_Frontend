@@ -1,3 +1,8 @@
 {
+  "builds": [
+    { "src": "api/index.py", "use": "@vercel/python" },
+    { "src": "api/stream.py", "use": "@vercel/python" },
+    { "src": "**", "use": "@vercel/static" }
+  ],
   "outputDirectory": "."
 }
